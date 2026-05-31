@@ -44,8 +44,9 @@ function App() {
   const [moveQueue, setMoveQueue] = useState<MoveType[]>([]);
   const [animatingMove, setAnimatingMove] = useState<MoveType | null>(null);
 
-  // Move history for undo support
-  const [, setMoveHistory] = useState<HistoryEntry[]>([]);
+  // Move history for undo/redo support
+  const [moveHistory, setMoveHistory] = useState<HistoryEntry[]>([]);
+  const [redoHistory, setRedoHistory] = useState<HistoryEntry[]>([]);
 
   // Scramble and History for Timer mode
   const [currentScramble, setCurrentScramble] = useState('');
@@ -95,6 +96,7 @@ function App() {
     setMoveQueue([]);
     setAnimatingMove(null);
     setMoveHistory([]);
+    setRedoHistory([]);
     const freshCube = initializeCube(customColors);
     setCubies(freshCube);
     setIsSolvedState(true);
@@ -105,6 +107,7 @@ function App() {
     setMoveQueue([]);
     setAnimatingMove(null);
     setMoveHistory([]);
+    setRedoHistory([]);
     const practiceState = generatePracticeState(stepId, customColors);
     setCubies(practiceState);
     setIsSolvedState(checkSolved(practiceState));
@@ -154,6 +157,7 @@ function App() {
     };
     setAnimatingMove(physicalMove);
     setMoveHistory((prev) => [...prev, { type: 'move', move: physicalMove }]);
+    setRedoHistory([]); // Invalidate redo stack on new action
   };
 
   // Undo the last move
@@ -163,38 +167,64 @@ function App() {
       const pendingCount = moveQueue.length;
       setMoveQueue([]);
       setMoveHistory((prev) => prev.slice(0, prev.length - pendingCount));
+      setRedoHistory([]);
       return;
     }
 
     if (animatingMove) return; // ignore if mid-animation
 
-    setMoveHistory((prev) => {
-      if (prev.length === 0) return prev;
-      const history = [...prev];
-      const lastEntry = history.pop();
-      if (!lastEntry) return prev;
+    if (moveHistory.length === 0) return;
 
-      if (lastEntry.type === 'move') {
-        const lastMove = lastEntry.move;
-        // Calculate inverse move
-        const inverseDirection = lastMove.direction === 1 ? -1 : lastMove.direction === -1 ? 1 : 2;
-        const inverseMove: MoveType = {
-          face: lastMove.face,
-          direction: inverseDirection,
-        };
+    const history = [...moveHistory];
+    const lastEntry = history.pop();
+    if (!lastEntry) return;
 
-        // Play the inverse move physically
-        animationDuration.current = 220;
-        setAnimatingMove(inverseMove);
-      } else if (lastEntry.type === 'state') {
-        // Restore state instantly
-        setCubies(lastEntry.state);
-        setIsSolvedState(checkSolved(lastEntry.state));
-        soundEffects.playTurn();
-      }
+    setMoveHistory(history);
+    setRedoHistory((prev) => [...prev, lastEntry]);
 
-      return history;
-    });
+    if (lastEntry.type === 'move') {
+      const lastMove = lastEntry.move;
+      // Calculate inverse move
+      const inverseDirection = lastMove.direction === 1 ? -1 : lastMove.direction === -1 ? 1 : 2;
+      const inverseMove: MoveType = {
+        face: lastMove.face,
+        direction: inverseDirection,
+      };
+
+      // Play the inverse move physically
+      animationDuration.current = 220;
+      setAnimatingMove(inverseMove);
+    } else if (lastEntry.type === 'state') {
+      // Restore state instantly
+      setCubies(lastEntry.state);
+      setIsSolvedState(checkSolved(lastEntry.state));
+      soundEffects.playTurn();
+    }
+  };
+
+  // Redo the last undone move (Forward/下一步)
+  const handleRedo = () => {
+    if (animatingMove || moveQueue.length > 0) return; // ignore if busy
+
+    if (redoHistory.length === 0) return;
+
+    const redo = [...redoHistory];
+    const lastEntry = redo.pop();
+    if (!lastEntry) return;
+
+    setRedoHistory(redo);
+    setMoveHistory((prev) => [...prev, lastEntry]);
+
+    if (lastEntry.type === 'move') {
+      // Play the move physically
+      animationDuration.current = 220;
+      setAnimatingMove(lastEntry.move);
+    } else if (lastEntry.type === 'state') {
+      // Restore state instantly
+      setCubies(lastEntry.state);
+      setIsSolvedState(checkSolved(lastEntry.state));
+      soundEffects.playTurn();
+    }
   };
 
   // AI instant solving of the current step with animations
@@ -202,6 +232,7 @@ function App() {
     // Clear any active move queues or animations
     setMoveQueue([]);
     setAnimatingMove(null);
+    setRedoHistory([]);
 
     // Try to solve mathematically using the full LBL solver
     const path = solveStepBFS(cubies, stepId, customColors);
@@ -236,10 +267,20 @@ function App() {
       const key = e.key.toLowerCase();
 
       // Check for Undo (Ctrl+Z / Cmd+Z)
-      const isUndo = (e.metaKey || e.ctrlKey) && key === 'z';
+      const isUndo = (e.metaKey || e.ctrlKey) && key === 'z' && !e.shiftKey;
       if (isUndo) {
         e.preventDefault();
         handleUndo();
+        return;
+      }
+
+      // Check for Redo (Ctrl+Shift+Z / Cmd+Shift+Z or Ctrl+Y / Cmd+Y)
+      const isRedo = 
+        ((e.metaKey || e.ctrlKey) && e.shiftKey && key === 'z') || 
+        ((e.ctrlKey || e.metaKey) && key === 'y');
+      if (isRedo) {
+        e.preventDefault();
+        handleRedo();
         return;
       }
       const validFaces: Record<string, FaceType> = {
@@ -260,7 +301,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveQueue, animatingMove, customColors]);
+  }, [moveQueue, animatingMove, customColors, moveHistory, redoHistory]);
 
   // Main Queue Processor and Animation Timer
   // Effect 1: Pop next move from queue when not animating
