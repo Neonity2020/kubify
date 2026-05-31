@@ -129,10 +129,6 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
     });
   };
 
-  const handleBackgroundMouseUp = () => {
-    isDragging.current = false;
-  };
-
   // Touch handlers for mobile background rotate
   const handleBackgroundTouchStart = (e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('.cubie-face')) return;
@@ -166,22 +162,52 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
     });
   };
 
-  const handleBackgroundTouchEnd = () => {
+
+  // Global Event Wrapper Handlers
+  const handleGlobalMouseMove = (e: MouseEvent) => {
+    if (activeTouch.current) {
+      handleFaceMove(e.clientX, e.clientY);
+      return;
+    }
+    if (isDragging.current) {
+      handleBackgroundMouseMove(e);
+    }
+  };
+
+  const handleGlobalMouseUp = () => {
+    activeTouch.current = null;
     isDragging.current = false;
   };
 
+  const handleGlobalTouchMove = (e: TouchEvent) => {
+    if (activeTouch.current) {
+      const touch = e.touches[0];
+      handleFaceMove(touch.clientX, touch.clientY);
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
+    if (isDragging.current) {
+      handleBackgroundTouchMove(e);
+      if (e.cancelable) e.preventDefault();
+    }
+  };
+
+  const handleGlobalTouchEnd = () => {
+    activeTouch.current = null;
+    isDragging.current = false;
+  };
 
   // Refs to keep latest handler references to avoid stale closure bugs
-  const mouseMoveHandlerRef = useRef(handleBackgroundMouseMove);
-  const mouseUpHandlerRef = useRef(handleBackgroundMouseUp);
-  const touchMoveHandlerRef = useRef(handleBackgroundTouchMove);
-  const touchEndHandlerRef = useRef(handleBackgroundTouchEnd);
+  const mouseMoveHandlerRef = useRef(handleGlobalMouseMove);
+  const mouseUpHandlerRef = useRef(handleGlobalMouseUp);
+  const touchMoveHandlerRef = useRef(handleGlobalTouchMove);
+  const touchEndHandlerRef = useRef(handleGlobalTouchEnd);
 
   useEffect(() => {
-    mouseMoveHandlerRef.current = handleBackgroundMouseMove;
-    mouseUpHandlerRef.current = handleBackgroundMouseUp;
-    touchMoveHandlerRef.current = handleBackgroundTouchMove;
-    touchEndHandlerRef.current = handleBackgroundTouchEnd;
+    mouseMoveHandlerRef.current = handleGlobalMouseMove;
+    mouseUpHandlerRef.current = handleGlobalMouseUp;
+    touchMoveHandlerRef.current = handleGlobalTouchMove;
+    touchEndHandlerRef.current = handleGlobalTouchEnd;
   });
 
   // Add global event listeners for mouse move and mouse up during dragging
@@ -222,17 +248,18 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
     };
   };
 
-  const handleFaceEnd = (clientX: number, clientY: number) => {
+  const handleFaceMove = (clientX: number, clientY: number) => {
     if (!activeTouch.current) return;
 
     const { cubieId, face, startX, startY } = activeTouch.current;
-    activeTouch.current = null;
-
     const dx = clientX - startX;
     const dy = clientY - startY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist < 30) return; // Drag threshold
+    if (dist < 20) return; // Drag threshold
+
+    // Clear activeTouch immediately to prevent multiple triggers
+    activeTouch.current = null;
 
     // Determine primary drag direction (horizontal or vertical)
     const isHorizontal = Math.abs(dx) > Math.abs(dy);
@@ -252,10 +279,6 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
         // Dragging left/right on Front face: U or D layer rotates
         targetFace = relativePos.y === 1 ? 'U' : relativePos.y === -1 ? 'D' : null;
         if (targetFace) {
-          // Drag right on U: U move (CW looking from top is rotateY(-90), which is screen right to left... wait!)
-          // Let's make it direct:
-          // Drag right on U: moves top layer right visually, which is U' (CCW). Drag left: U (CW).
-          // Drag right on D: moves bottom layer right visually, which is D (CW). Drag left: D' (CCW).
           if (targetFace === 'U') {
             direction = dx > 0 ? -1 : 1;
           } else {
@@ -266,8 +289,6 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
         // Dragging up/down on Front face: L or R layer rotates
         targetFace = relativePos.x === 1 ? 'R' : relativePos.x === -1 ? 'L' : null;
         if (targetFace) {
-          // Drag up on R: R move (CW). Drag down: R' (CCW).
-          // Drag up on L: L' move (CCW). Drag down: L (CW).
           if (targetFace === 'R') {
             direction = dy < 0 ? 1 : -1;
           } else {
@@ -280,8 +301,6 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
         // Dragging left/right on Right face: U or D layer rotates
         targetFace = relativePos.y === 1 ? 'U' : relativePos.y === -1 ? 'D' : null;
         if (targetFace) {
-          // Drag left on R-face U-layer: U move (CW). Drag right: U' (CCW).
-          // Drag left on R-face D-layer: D' move (CCW). Drag right: D (CW).
           if (targetFace === 'U') {
             direction = dx < 0 ? 1 : -1;
           } else {
@@ -292,8 +311,6 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
         // Dragging up/down on Right face: F or B layer rotates
         targetFace = relativePos.z === 1 ? 'F' : relativePos.z === -1 ? 'B' : null;
         if (targetFace) {
-          // Drag up on Front-Right column: F' (CCW). Drag down: F (CW).
-          // Drag up on Back-Right column: B (CW). Drag down: B' (CCW).
           if (targetFace === 'F') {
             direction = dy < 0 ? -1 : 1;
           } else {
@@ -475,14 +492,9 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
                     ...getStickerStyle(cubie.colors.U, 'U'),
                   }}
                   onMouseDown={(e) => handleFaceStart(cubie.id, 'U', e.clientX, e.clientY)}
-                  onMouseUp={(e) => handleFaceEnd(e.clientX, e.clientY)}
                   onTouchStart={(e) => {
                     const touch = e.touches[0];
                     handleFaceStart(cubie.id, 'U', touch.clientX, touch.clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    const touch = e.changedTouches[0];
-                    handleFaceEnd(touch.clientX, touch.clientY);
                   }}
                 />
               )}
@@ -499,14 +511,9 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
                     ...getStickerStyle(cubie.colors.D, 'D'),
                   }}
                   onMouseDown={(e) => handleFaceStart(cubie.id, 'D', e.clientX, e.clientY)}
-                  onMouseUp={(e) => handleFaceEnd(e.clientX, e.clientY)}
                   onTouchStart={(e) => {
                     const touch = e.touches[0];
                     handleFaceStart(cubie.id, 'D', touch.clientX, touch.clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    const touch = e.changedTouches[0];
-                    handleFaceEnd(touch.clientX, touch.clientY);
                   }}
                 />
               )}
@@ -523,14 +530,9 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
                     ...getStickerStyle(cubie.colors.R, 'R'),
                   }}
                   onMouseDown={(e) => handleFaceStart(cubie.id, 'R', e.clientX, e.clientY)}
-                  onMouseUp={(e) => handleFaceEnd(e.clientX, e.clientY)}
                   onTouchStart={(e) => {
                     const touch = e.touches[0];
                     handleFaceStart(cubie.id, 'R', touch.clientX, touch.clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    const touch = e.changedTouches[0];
-                    handleFaceEnd(touch.clientX, touch.clientY);
                   }}
                 />
               )}
@@ -547,14 +549,9 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
                     ...getStickerStyle(cubie.colors.L, 'L'),
                   }}
                   onMouseDown={(e) => handleFaceStart(cubie.id, 'L', e.clientX, e.clientY)}
-                  onMouseUp={(e) => handleFaceEnd(e.clientX, e.clientY)}
                   onTouchStart={(e) => {
                     const touch = e.touches[0];
                     handleFaceStart(cubie.id, 'L', touch.clientX, touch.clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    const touch = e.changedTouches[0];
-                    handleFaceEnd(touch.clientX, touch.clientY);
                   }}
                 />
               )}
@@ -571,14 +568,9 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
                     ...getStickerStyle(cubie.colors.F, 'F'),
                   }}
                   onMouseDown={(e) => handleFaceStart(cubie.id, 'F', e.clientX, e.clientY)}
-                  onMouseUp={(e) => handleFaceEnd(e.clientX, e.clientY)}
                   onTouchStart={(e) => {
                     const touch = e.touches[0];
                     handleFaceStart(cubie.id, 'F', touch.clientX, touch.clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    const touch = e.changedTouches[0];
-                    handleFaceEnd(touch.clientX, touch.clientY);
                   }}
                 />
               )}
@@ -595,14 +587,9 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
                     ...getStickerStyle(cubie.colors.B, 'B'),
                   }}
                   onMouseDown={(e) => handleFaceStart(cubie.id, 'B', e.clientX, e.clientY)}
-                  onMouseUp={(e) => handleFaceEnd(e.clientX, e.clientY)}
                   onTouchStart={(e) => {
                     const touch = e.touches[0];
                     handleFaceStart(cubie.id, 'B', touch.clientX, touch.clientY);
-                  }}
-                  onTouchEnd={(e) => {
-                    const touch = e.changedTouches[0];
-                    handleFaceEnd(touch.clientX, touch.clientY);
                   }}
                 />
               )}
