@@ -305,11 +305,22 @@ function App() {
 
   // Main Queue Processor and Animation Timer
   // Effect 1: Pop next move from queue when not animating
+  // Uses a 30ms delay to let the browser paint the static state and reset CSS transitions,
+  // preventing matrix decomposition artifacts (cubies flipping/spinning wildly between moves).
   useEffect(() => {
-    if (!animatingMove && moveQueue.length > 0) {
-      const nextMove = moveQueue[0];
-      setMoveQueue((prev) => prev.slice(1));
-      setAnimatingMove(nextMove);
+    if (animatingMove) return;
+
+    if (moveQueue.length > 0) {
+      const timer = setTimeout(() => {
+        setMoveQueue((prev) => {
+          if (prev.length === 0) return prev;
+          const nextMove = prev[0];
+          setAnimatingMove(nextMove);
+          return prev.slice(1);
+        });
+      }, 30);
+
+      return () => clearTimeout(timer);
     }
   }, [animatingMove, moveQueue]);
 
