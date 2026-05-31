@@ -6,7 +6,7 @@ import { type MoveType, type Cubie, DEFAULT_COLORS } from '../utils/cubeLogic';
 interface SolvingGuidePanelProps {
   onPlayAlgorithm: (moves: MoveType[]) => void;
   isQueueAnimating: boolean;
-  onResetCube: () => void;
+  onResetCube: (stepId: number) => void;
   onAISolveStep: (stepId: number) => void;
   theme: 'classic' | 'neon' | 'pastel' | 'glass';
   customColors?: typeof DEFAULT_COLORS;
@@ -361,7 +361,7 @@ export const SolvingGuidePanel: React.FC<SolvingGuidePanelProps> = ({
       {/* Guide Reset & AI Solve Actions */}
       <div className="mt-4 pt-3 border-t border-border/20 flex gap-2">
         <button
-          onClick={onResetCube}
+          onClick={() => onResetCube(currentStep.id)}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-secondary/30 text-secondary-foreground hover:bg-secondary/50 border border-border/30 transition-all cursor-pointer"
         >
           <RefreshCw className="h-3.5 w-3.5" />

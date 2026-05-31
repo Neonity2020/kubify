@@ -3,7 +3,7 @@ import { RubiksCube3D } from './components/RubiksCube3D';
 import { ControlPanel } from './components/ControlPanel';
 import { Timer } from './components/Timer';
 import { SolvingGuidePanel } from './components/SolvingGuidePanel';
-import { solveStepBFS } from './utils/solvingGuide';
+import { solveStepBFS, generatePracticeState } from './utils/solvingGuide';
 import {
   initializeCube,
   applyMove,
@@ -98,6 +98,18 @@ function App() {
     const freshCube = initializeCube(customColors);
     setCubies(freshCube);
     setIsSolvedState(true);
+  };
+
+  // Reset the cube to practice state for a specific LBL step
+  const handleResetPractice = (stepId: number) => {
+    setMoveQueue([]);
+    setAnimatingMove(null);
+    setAnimationProgress(0);
+    setMoveHistory([]);
+    const practiceState = generatePracticeState(stepId, customColors);
+    setCubies(practiceState);
+    setIsSolvedState(checkSolved(practiceState));
+    soundEffects.playTurn();
   };
 
   // Scramble the cube physically by adding moves to the queue
@@ -392,7 +404,7 @@ function App() {
             <SolvingGuidePanel
               onPlayAlgorithm={handleQueueMoves}
               isQueueAnimating={moveQueue.length > 0 || animatingMove !== null}
-              onResetCube={handleResetCube}
+              onResetCube={handleResetPractice}
               onAISolveStep={handleAISolveStep}
               theme={theme}
               customColors={customColors}

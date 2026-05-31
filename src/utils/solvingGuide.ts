@@ -1,4 +1,4 @@
-import { type MoveType, parseMoveString, type Cubie, DEFAULT_COLORS, checkSolved, applyMove, type FaceType } from './cubeLogic';
+import { type MoveType, parseMoveString, type Cubie, DEFAULT_COLORS, checkSolved, applyMove, type FaceType, initializeCube, generateScramble } from './cubeLogic';
 
 
 
@@ -980,5 +980,24 @@ export const solveStepBFS = (
   }
 
   return null;
+};
+
+export const generatePracticeState = (stepId: number, customColors = DEFAULT_COLORS): Cubie[] => {
+  let state = initializeCube(customColors);
+  const scramble = generateScramble(20);
+  for (const m of scramble) {
+    state = applyMove(state, m);
+  }
+
+  for (let sId = 1; sId < stepId; sId++) {
+    const path = solveStepBFS(state, sId, customColors);
+    if (path) {
+      for (const m of path) {
+        state = applyMove(state, m);
+      }
+    }
+  }
+
+  return state;
 };
 
