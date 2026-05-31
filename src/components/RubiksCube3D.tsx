@@ -424,7 +424,7 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
             const dir = animatingMove.direction;
             const targetAngle = 90 * dir;
             // Face factor for visual CW matching logical coordinate direction
-            const factor = face === 'U' || face === 'R' || face === 'B' ? -1 : 1;
+            const factor = face === 'U' || face === 'L' || face === 'B' ? -1 : 1;
             const angle = targetAngle * factor * animationProgress;
 
             if (face === 'U' || face === 'D') {
