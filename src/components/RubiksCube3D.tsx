@@ -254,15 +254,25 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
     const { cubieId, face, startX, startY } = activeTouch.current;
     const dx = clientX - startX;
     const dy = clientY - startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist < 20) return; // Drag threshold
+    // Minimum distance threshold to start evaluating swipe
+    if (dist < 25) return;
 
-    // Clear activeTouch immediately to prevent multiple triggers
+    // Dominant axis check: require one axis to be clearly dominant (at least 1.6x larger than the other).
+    // This prevents accidental diagonal turns (e.g. F face turning to L face on diagonal drift).
+    const ratio = 1.6;
+    const isHorizontal = absX > ratio * absY;
+    const isVertical = absY > ratio * absX;
+
+    if (!isHorizontal && !isVertical) {
+      return; // Ambiguous diagonal drag, wait for more movement
+    }
+
+    // Dominant direction confirmed! Clear tracking immediately to prevent double triggers
     activeTouch.current = null;
-
-    // Determine primary drag direction (horizontal or vertical)
-    const isHorizontal = Math.abs(dx) > Math.abs(dy);
 
     // Get the cubie that was dragged
     const cubie = cubies.find((c) => c.id === cubieId);
