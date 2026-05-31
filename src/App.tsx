@@ -133,7 +133,7 @@ function App() {
   // Queue moves to execute
   const handleQueueMoves = (moves: MoveType[]) => {
     if (moves.length === 0) return;
-    animationDuration.current = 220; // reset to normal speed
+    animationDuration.current = 480; // slow down for demo plays (480ms)
     const physicalMoves = moves.map((move) => ({
       ...move,
       face: mapRelativeToPhysical(move.face, cubeRotationRef.current.y),
@@ -239,7 +239,7 @@ function App() {
     
     if (path !== null && path.length > 0) {
       // Real sequence of moves found! Play them.
-      animationDuration.current = 220; // normal speed
+      animationDuration.current = 480; // slow down for AI solver (480ms)
       setAnimatingMove(path[0]);
       setMoveQueue(path.slice(1));
       setMoveHistory((prev) => [
