@@ -6,7 +6,7 @@ interface RubiksCube3DProps {
   cubies: Cubie[];
   onMove: (move: MoveType) => void;
   animatingMove: MoveType | null;
-  animationProgress: number; // 0 to 1
+  animationDuration: number;
   theme: 'classic' | 'neon' | 'pastel' | 'glass';
   customColors?: typeof DEFAULT_COLORS;
   cubeRotation: { x: number; y: number };
@@ -17,7 +17,7 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
   cubies,
   onMove,
   animatingMove,
-  animationProgress,
+  animationDuration,
   theme,
   customColors: _customColors = DEFAULT_COLORS,
   cubeRotation,
@@ -417,23 +417,29 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
           // Determine if this cubie is currently rotating
           const isRotating = animatingMove && isCubieInFace(cubie, animatingMove.face);
 
-          // Get animation transform
+          // Get animation transform and transition style
           let rotationTransform = '';
+          let transitionStyle = 'none';
+
           if (isRotating && animatingMove) {
             const face = animatingMove.face;
             const dir = animatingMove.direction;
             const targetAngle = 90 * dir;
             // Face factor for visual CW matching logical coordinate direction
             const factor = face === 'U' || face === 'L' || face === 'B' ? -1 : 1;
-            const angle = targetAngle * factor * animationProgress;
+            const angle = targetAngle * factor;
 
             if (face === 'U' || face === 'D') {
-              rotationTransform = `rotateY(${angle}deg)`;
+              rotationTransform = `rotateY(${angle}deg) rotateX(0deg) rotateZ(0deg)`;
             } else if (face === 'R' || face === 'L') {
-              rotationTransform = `rotateX(${angle}deg)`;
+              rotationTransform = `rotateY(0deg) rotateX(${angle}deg) rotateZ(0deg)`;
             } else {
-              rotationTransform = `rotateZ(${angle}deg)`;
+              rotationTransform = `rotateY(0deg) rotateX(0deg) rotateZ(${angle}deg)`;
             }
+            transitionStyle = `transform ${animationDuration}ms cubic-bezier(0.25, 1, 0.5, 1)`;
+          } else {
+            rotationTransform = 'rotateY(0deg) rotateX(0deg) rotateZ(0deg)';
+            transitionStyle = 'none';
           }
 
           // Static positioning. Math Y positive is Up, CSS translation Y negative is Up.
@@ -452,7 +458,7 @@ export const RubiksCube3D: React.FC<RubiksCube3DProps> = ({
             top: `${spacing}px`,
             transformStyle: 'preserve-3d',
             transform: `${rotationTransform} ${positionTransform}`,
-            // Smoother layer visual transitions if needed, but we handle steps frame-by-frame
+            transition: transitionStyle,
           };
 
           return (

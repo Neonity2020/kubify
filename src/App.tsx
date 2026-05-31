@@ -37,11 +37,12 @@ function App() {
   // Cube State
   const [cubies, setCubies] = useState(() => initializeCube(DEFAULT_COLORS));
   const [isSolvedState, setIsSolvedState] = useState(true);
+  const isSolvedRef = useRef(isSolvedState);
+  isSolvedRef.current = isSolvedState;
 
   // Move Queue and Animation State
   const [moveQueue, setMoveQueue] = useState<MoveType[]>([]);
   const [animatingMove, setAnimatingMove] = useState<MoveType | null>(null);
-  const [animationProgress, setAnimationProgress] = useState(0);
 
   // Move history for undo support
   const [, setMoveHistory] = useState<HistoryEntry[]>([]);
@@ -93,7 +94,6 @@ function App() {
   const handleResetCube = () => {
     setMoveQueue([]);
     setAnimatingMove(null);
-    setAnimationProgress(0);
     setMoveHistory([]);
     const freshCube = initializeCube(customColors);
     setCubies(freshCube);
@@ -104,7 +104,6 @@ function App() {
   const handleResetPractice = (stepId: number) => {
     setMoveQueue([]);
     setAnimatingMove(null);
-    setAnimationProgress(0);
     setMoveHistory([]);
     const practiceState = generatePracticeState(stepId, customColors);
     setCubies(practiceState);
@@ -116,11 +115,12 @@ function App() {
   const handleScrambleCube = () => {
     handleResetCube();
     const scrambleMoves = generateScramble(22);
-    // Speed up animation duration during scrambles
-    animationDuration.current = 75;
-    
-    // Add all moves to queue
-    setMoveQueue(scrambleMoves);
+    if (scrambleMoves.length > 0) {
+      // Speed up animation duration during scrambles
+      animationDuration.current = 75;
+      setAnimatingMove(scrambleMoves[0]);
+      setMoveQueue(scrambleMoves.slice(1));
+    }
     
     // Update current scramble text for record
     const scrambleStr = scrambleMoves.map(moveToString).join(' ');
@@ -129,12 +129,19 @@ function App() {
 
   // Queue moves to execute
   const handleQueueMoves = (moves: MoveType[]) => {
+    if (moves.length === 0) return;
     animationDuration.current = 220; // reset to normal speed
     const physicalMoves = moves.map((move) => ({
       ...move,
       face: mapRelativeToPhysical(move.face, cubeRotationRef.current.y),
     }));
-    setMoveQueue((prev) => [...prev, ...physicalMoves]);
+    
+    if (!animatingMove && moveQueue.length === 0) {
+      setAnimatingMove(physicalMoves[0]);
+      setMoveQueue(physicalMoves.slice(1));
+    } else {
+      setMoveQueue((prev) => [...prev, ...physicalMoves]);
+    }
   };
 
   // Single Move Handler (handles button clicks, swipes)
@@ -145,7 +152,7 @@ function App() {
       ...move,
       face: mapRelativeToPhysical(move.face, cubeRotationRef.current.y),
     };
-    setMoveQueue([physicalMove]);
+    setAnimatingMove(physicalMove);
     setMoveHistory((prev) => [...prev, { type: 'move', move: physicalMove }]);
   };
 
@@ -178,7 +185,7 @@ function App() {
 
         // Play the inverse move physically
         animationDuration.current = 220;
-        setMoveQueue([inverseMove]);
+        setAnimatingMove(inverseMove);
       } else if (lastEntry.type === 'state') {
         // Restore state instantly
         setCubies(lastEntry.state);
@@ -195,15 +202,15 @@ function App() {
     // Clear any active move queues or animations
     setMoveQueue([]);
     setAnimatingMove(null);
-    setAnimationProgress(0);
 
     // Try to solve mathematically using the full LBL solver
     const path = solveStepBFS(cubies, stepId, customColors);
     
-    if (path !== null) {
+    if (path !== null && path.length > 0) {
       // Real sequence of moves found! Play them.
       animationDuration.current = 220; // normal speed
-      setMoveQueue(path);
+      setAnimatingMove(path[0]);
+      setMoveQueue(path.slice(1));
       setMoveHistory((prev) => [
         ...prev,
         ...path.map((m) => ({ type: 'move' as const, move: m })),
@@ -255,64 +262,49 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moveQueue, animatingMove, customColors]);
 
-  // Main Queue Processor and Animation Loop
+  // Main Queue Processor and Animation Timer
+  // Effect 1: Pop next move from queue when not animating
   useEffect(() => {
-    let animationFrameId: number;
-    let startTime: number | null = null;
-
-    const animate = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / animationDuration.current, 1);
-
-      setAnimationProgress(progress);
-
-      if (progress < 1) {
-        animationFrameId = requestAnimationFrame(animate);
-      } else {
-        // Animation finished: commit to state
-        if (animatingMove) {
-          // Play click sound
-          if (animationDuration.current > 100) {
-            soundEffects.playTurn();
-          } else {
-            soundEffects.playScrambleClick();
-          }
-
-          setCubies((prev) => {
-            const nextState = applyMove(prev, animatingMove);
-            
-            // Check if solved
-            const solved = checkSolved(nextState);
-            if (solved && !isSolvedState) {
-              soundEffects.playSolvedChime();
-              setIsSolvedState(true);
-            } else if (!solved && isSolvedState) {
-              setIsSolvedState(false);
-            }
-
-            return nextState;
-          });
-        }
-
-        setAnimatingMove(null);
-        setAnimationProgress(0);
-      }
-    };
-
     if (!animatingMove && moveQueue.length > 0) {
-      // Pop the next move
       const nextMove = moveQueue[0];
       setMoveQueue((prev) => prev.slice(1));
       setAnimatingMove(nextMove);
-      startTime = null;
-      animationFrameId = requestAnimationFrame(animate);
-    } else if (animatingMove) {
-      animationFrameId = requestAnimationFrame(animate);
     }
+  }, [animatingMove, moveQueue]);
 
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [animatingMove, moveQueue, isSolvedState]);
+  // Effect 2: Handle active animation duration timer
+  useEffect(() => {
+    if (!animatingMove) return;
+
+    const timer = setTimeout(() => {
+      // Play click sound
+      if (animationDuration.current > 100) {
+        soundEffects.playTurn();
+      } else {
+        soundEffects.playScrambleClick();
+      }
+
+      setCubies((prev) => {
+        const nextState = applyMove(prev, animatingMove);
+        
+        // Check if solved
+        const solved = checkSolved(nextState);
+        const wasSolved = isSolvedRef.current;
+        if (solved && !wasSolved) {
+          soundEffects.playSolvedChime();
+          setIsSolvedState(true);
+        } else if (!solved && wasSolved) {
+          setIsSolvedState(false);
+        }
+
+        return nextState;
+      });
+
+      setAnimatingMove(null);
+    }, animationDuration.current);
+
+    return () => clearTimeout(timer);
+  }, [animatingMove]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col relative overflow-hidden font-sans pb-8">
@@ -354,7 +346,7 @@ function App() {
               cubies={cubies}
               onMove={handleSingleMove}
               animatingMove={animatingMove}
-              animationProgress={animationProgress}
+              animationDuration={animationDuration.current}
               theme={theme}
               customColors={customColors}
               cubeRotation={cubeRotation}
